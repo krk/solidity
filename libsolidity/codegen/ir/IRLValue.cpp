@@ -166,3 +166,79 @@ string IRStorageArrayLength::setToZero() const
 {
 	return storeValue("0", *TypeProvider::uint256());
 }
+
+IRMemoryItem::IRMemoryItem(
+	IRGenerationContext& _context,
+	std::string _address,
+	bool _byteArrayElement,
+	Type const& _type
+):
+	IRLValue(_context, &_type),
+	m_address(move(_address)),
+	m_byteArrayElement(_byteArrayElement)
+{ }
+
+string IRMemoryItem::retrieveValue() const
+{
+	if (m_byteArrayElement)
+		return "byte(0, mload(" + m_address + ")";
+
+	if (m_type->isValueType())
+		return m_context.utils().readFromMemory(*m_type) +
+			"(" +
+			m_address +
+			")\n";
+	else
+		return "mload(" + m_address + ")\n";
+}
+
+string IRMemoryItem::storeValue(string const& _value, Type const& _type) const
+{
+	if (!m_type->isValueType())
+	{
+		solUnimplementedAssert(_type == *m_type, "Conversion not implemented for assignment to memory.");
+
+		solAssert(m_type->sizeOnStack() == 1, "");
+		solAssert(dynamic_cast<ReferenceType const*>(m_type), "");
+
+		return "mstore(" + m_address + ", " + _value + ")\n";
+	}
+
+	solAssert(_type.isValueType(), "");
+
+	string prepared = _value;
+
+	// Exists to see if this case ever happens
+	solAssert(_type == *m_type, "");
+
+	if (_type != *m_type)
+		prepared =
+			m_context.utils().conversionFunction(_type, *m_type) +
+			"(" +
+			_value +
+			")";
+	else
+		prepared =
+			m_context.utils().cleanupFunction(*m_type) +
+			"(" +
+			_value +
+			")";
+
+	if (m_byteArrayElement)
+	{
+		solAssert(*m_type == *TypeProvider::byte(), "");
+		return "mstore8(" + m_address + ", byte(0, " + prepared + "))\n";
+	}
+	else
+		return m_context.utils().writeToMemoryFunction(*m_type) +
+			"(" +
+			m_address +
+			", " +
+			prepared +
+			")\n";
+}
+
+string IRMemoryItem::setToZero() const
+{
+	return storeValue(m_context.utils().zeroValueFunction(*m_type) + "()", *m_type);
+}

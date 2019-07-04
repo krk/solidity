@@ -5,6 +5,11 @@ contract C {
         uint a;
         uint b;
     }
+    struct T {
+        uint a;
+        uint b;
+        string s;
+    }
     uint public state = 0;
     bool[2][] flags;
     constructor(uint _state) public {
@@ -51,27 +56,36 @@ contract C {
     function s() public returns (uint[2] memory, uint) {
         return ([uint(123), 456], 789);
     }
-    function t() public returns (S memory) {
+    function t1() public returns (S memory) {
         return S(23, 42);
     }
-    function u() public returns (S[2] memory) {
-        return [S(23, 42), S(555, 666)];
+    function t2() public returns (T memory) {
+        return T(23, 42, "any");
+    }
+    function u() public returns (T[2] memory) {
+        return [T(23, 42, "any"), T(555, 666, "any")];
     }
     function v() public returns (bool[2][] memory) {
         return flags;
     }
-    function w() public returns (string[2] memory) {
+    function w1() public returns (string[1] memory) {
+        return ["any"];
+    }
+    function w2() public returns (string[2] memory) {
         return ["any", "any"];
     }
-    function x() public returns (string[2] memory, string[2] memory) {
-        return (["any", "any"], ["any", "any"]);
+    function w3() public returns (string[3] memory) {
+        return ["any", "any", "any"];
+    }
+    function x() public returns (string[2] memory, string[3] memory) {
+        return (["any", "any"], ["any", "any", "any"]);
     }
 }
 // ----
-// constructor(): 3 ->
+// constructor(): 3 -> 
 // state() -> 3
 // _() -> FAILURE
-// e() -> 1
+// e() -> 
 // f() -> 2
 // f(), 1 ether -> 2
 // g() -> 2, 3
@@ -85,11 +99,13 @@ contract C {
 // n() -> 0x20, 3, "any"
 // o() -> 0x40, 0x80, 3, "any", 3, "any"
 // p() -> 0x60, 0x2a, 0xa0, 3, "any", 3, "any"
+// p() -> 0x60, 42, 0xa0, 3, "any", 3, "any"
 // q(uint256): 99 -> 693
-// r() -> 0x60, 0x2a, 0xa0, 3, "any", 3
-// s() -> 1, 3
-// t() -> 1, 3
-// u() -> 23, 41
-// v() -> true, false
-// x() -> "any", "any"
-// x() -> "any", "any"
+// r() -> true, false
+// s() -> 123, 456, 789
+// t1() -> 23, 42
+// t2() -> 0x20, 23, 42, 0x60, 3, "any"
+// w1() -> 0x20, 0x20, 3, "any"
+// w2() -> 0x20, 0x40, 0x80, 3, "any", 3, "any"
+// w3() -> 0x20, 0x60, 0xa0, 0xe0, 3, "any", 3, "any", 3, "any"
+// x() -> 0x40, 0x01, 0x40, 0x80, 3, "any", 3, "any", 0x60, 0xa0, 0xe0, 3, "any", 3, "any", 3, "any"

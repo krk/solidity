@@ -97,14 +97,14 @@ struct ABIType
 {
 	enum Type
 	{
-		None,
-		Failure,
-		Boolean,
-		UnsignedDec,
-		SignedDec,
-		Hex,
-		HexString,
-		String
+		None,			// 0
+		Failure,		// 1
+		Boolean,		// 2
+		UnsignedDec,	// 3
+		SignedDec,		// 4
+		Hex,			// 5
+		HexString,		// 6
+		String			// 7
 	};
 	enum Align
 	{
@@ -114,13 +114,15 @@ struct ABIType
 	};
 	enum MetaInfo
 	{
-		Pointer,
+		MetaPointer,
+		MetaValue,
+		MetaString,
 	};
 
 	Type type = ABIType::None;
 	Align align = ABIType::AlignRight;
 	size_t size = 0;
-	MetaInfo meta = ABIType::Pointer;
+	MetaInfo meta = ABIType::MetaValue;
 	bool alignDeclared = false;
 };
 

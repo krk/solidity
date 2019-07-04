@@ -102,8 +102,6 @@ string TestFunctionCall::format(
 		else
 		{
 			bytes output = m_rawBytes;
-			if (!output.empty())
-				cout << output << endl;
 			bool const isFailure = m_failure;
 			result = isFailure ?
 				failure :

@@ -36,12 +36,14 @@ using namespace soltest;
 namespace
 {
 
+using ParameterList = dev::solidity::test::ParameterList;
+
 auto arraySize(string const& _arrayType) -> size_t
 {
 	auto leftBrack = _arrayType.find("[");
 	auto rightBrack = _arrayType.find("]");
 
-//	soltestAssert(leftBrack != string::npos && rightBrack != string::npos, "");
+	//	soltestAssert(leftBrack != string::npos && rightBrack != string::npos, "");
 
 	string size = _arrayType.substr(leftBrack + 1, rightBrack - leftBrack - 1);
 	return static_cast<size_t>(stoi(size));
@@ -55,17 +57,28 @@ dev::solidity::test::ParameterList ContractABIUtils::parametersFromJson(
 	string const& _functionName
 ) const
 {
-	ParameterList abiParams;
+	ParameterList addressTypeParams;
+	ParameterList valueTypeParams;
+	ParameterList dynamicTypeParams;
+
+	ParameterList finalParams;
+
 	for (auto const& function: _contractABI)
+	{
 		if (function["name"] == _functionName)
 			for (auto const& output: function["outputs"])
 			{
-				cout << output << endl;
 				string type = output["type"].asString();
-				auto types = fromTypeName(output);
-				if (types)
-					for (auto const& type: types.get())
-						abiParams.push_back(Parameter{bytes(), "", type, FormatInfo{}});
+				size_t parameterIndex = 0;
+				if (auto types = fromTypeName(output))
+				{
+					for (auto const& type: get<0>(types.get()))
+						addressTypeParams.push_back(Parameter{bytes(), "", type, FormatInfo{}});
+					for (auto const& type: get<1>(types.get()))
+						valueTypeParams.push_back(Parameter{bytes(), "", type, FormatInfo{}});
+					for (auto const& type: get<2>(types.get()))
+						dynamicTypeParams.push_back(Parameter{bytes(), "", type, FormatInfo{}});
+				}
 				else
 				{
 					_errorReporter.error(
@@ -73,12 +86,23 @@ dev::solidity::test::ParameterList ContractABIUtils::parametersFromJson(
 						"\" to internal ABI type representation. Unable to update expectations."
 					);
 				}
-			}
 
-	return abiParams;
+				finalParams += addressTypeParams + valueTypeParams;
+
+				addressTypeParams.clear();
+				valueTypeParams.clear();
+
+				parameterIndex++;
+			}
+	}
+
+	return finalParams + dynamicTypeParams;
 }
 
-boost::optional<vector<ABIType>> ContractABIUtils::fromTypeName(Json::Value const& _functionOutput) const
+boost::optional<tuple<ABITypes, ABITypes, ABITypes>> ContractABIUtils::fromTypeName(
+	Json::Value const& _functionOutput,
+	bool _isCompoundType
+) const
 {
 	static regex s_boolType{"(bool)"};
 	static regex s_uintType{"(uint\\d*)"};
@@ -94,78 +118,85 @@ boost::optional<vector<ABIType>> ContractABIUtils::fromTypeName(Json::Value cons
 	static regex s_stringArrayType{"(string)(\\[\\d+\\])"};
 	static regex s_tupleArrayType{"(tuple)(\\[\\d+\\])"};
 
-	vector<ABIType> abiTypes;
-	string type = _functionOutput["type"].asString();
+	vector<ABIType> addressTypes;
+	vector<ABIType> valueTypes;
+	vector<ABIType> dynamicTypes;
 
+	string type = _functionOutput["type"].asString();
 	if (regex_match(type, s_boolType))
-		abiTypes.push_back(ABIType{ABIType::Boolean, ABIType::AlignRight, 32});
+		valueTypes.push_back(ABIType{ABIType::Boolean, ABIType::AlignRight, 32});
 	else if (regex_match(type, s_uintType))
-		abiTypes.push_back(ABIType{ABIType::UnsignedDec, ABIType::AlignRight, 32});
+		valueTypes.push_back(ABIType{ABIType::UnsignedDec, ABIType::AlignRight, 32});
 	else if (regex_match(type, s_intType))
-		abiTypes.push_back(ABIType{ABIType::SignedDec, ABIType::AlignRight, 32});
+		valueTypes.push_back(ABIType{ABIType::SignedDec, ABIType::AlignRight, 32});
 	else if (regex_match(type, s_bytesType))
-		abiTypes.push_back(ABIType{ABIType::Hex, ABIType::AlignRight, 32});
+		valueTypes.push_back(ABIType{ABIType::Hex, ABIType::AlignRight, 32});
 	else if (regex_match(type, s_dynBytesType))
 	{
-		abiTypes.push_back(ABIType{ABIType::UnsignedDec, ABIType::AlignRight, 32});
-		abiTypes.push_back(ABIType{ABIType::UnsignedDec, ABIType::AlignRight, 32});
-		abiTypes.push_back(ABIType{ABIType::HexString, ABIType::AlignLeft, 32});
+		valueTypes.push_back(ABIType{ABIType::UnsignedDec, ABIType::AlignRight, 32});
+		valueTypes.push_back(ABIType{ABIType::UnsignedDec, ABIType::AlignRight, 32});
+		valueTypes.push_back(ABIType{ABIType::HexString, ABIType::AlignLeft, 32});
 	}
 	else if (regex_match(type, s_stringType))
 	{
-		abiTypes.push_back(ABIType{ABIType::Hex, ABIType::AlignRight, 32, ABIType::Pointer});
-		abiTypes.push_back(ABIType{ABIType::UnsignedDec, ABIType::AlignRight, 32});
-		abiTypes.push_back(ABIType{ABIType::String, ABIType::AlignLeft, 32});
+		addressTypes.push_back(ABIType{ABIType::Hex, ABIType::AlignRight, 32, ABIType::MetaPointer});
+
+		if (_isCompoundType)
+			dynamicTypes.push_back(ABIType{ABIType::Hex, ABIType::AlignRight, 32, ABIType::MetaPointer});
+
+		dynamicTypes.push_back(ABIType{ABIType::UnsignedDec, ABIType::AlignRight, 32, ABIType::MetaString});
+		dynamicTypes.push_back(ABIType{ABIType::String, ABIType::AlignLeft, 32, ABIType::MetaString});
 	}
 	else if (regex_match(type, s_tupleType))
 	{
 		for (auto const& component: _functionOutput["components"])
 		{
-			auto tupleComponentTypes = fromTypeName(component);
+			auto tupleComponentTypes = fromTypeName(component, true);
 			if (tupleComponentTypes)
-				for (auto const& abiType: tupleComponentTypes.get())
-					abiTypes.push_back(abiType);
+			{
+				for (auto const& abiType: get<0>(tupleComponentTypes.get()))
+					addressTypes.push_back(abiType);
+				for (auto const& abiType: get<1>(tupleComponentTypes.get()))
+					valueTypes.push_back(abiType);
+				for (auto const& abiType: get<2>(tupleComponentTypes.get()))
+					dynamicTypes.push_back(abiType);
+			}
 		}
 	}
 	else if (regex_match(type, s_boolArrayType))
 	{
 		for (size_t i = 0; i < arraySize(type); i++)
-			abiTypes.push_back(ABIType{ABIType::Boolean, ABIType::AlignRight, 32});
+			valueTypes.push_back(ABIType{ABIType::Boolean, ABIType::AlignRight, 32});
 	}
 	else if (regex_match(type, s_uintArrayType))
 	{
 		for (size_t i = 0; i < arraySize(type); i++)
-			abiTypes.push_back(ABIType{ABIType::UnsignedDec, ABIType::AlignRight, 32});
+			valueTypes.push_back(ABIType{ABIType::UnsignedDec, ABIType::AlignRight, 32});
 	}
 	else if (regex_match(type, s_intArrayType))
 	{
 		for (size_t i = 0; i < arraySize(type); i++)
-			abiTypes.push_back(ABIType{ABIType::SignedDec, ABIType::AlignRight, 32});
+			valueTypes.push_back(ABIType{ABIType::SignedDec, ABIType::AlignRight, 32});
 	}
 	else if (regex_match(type, s_stringArrayType))
 	{
+		addressTypes.push_back(ABIType{ABIType::Hex, ABIType::AlignRight, 32, ABIType::MetaPointer});
+
+		for (size_t i = 0; i < arraySize(type); i++)
+			dynamicTypes.push_back(ABIType{ABIType::Hex, ABIType::AlignRight, 32, ABIType::MetaPointer});
+
 		for (size_t i = 0; i < arraySize(type); i++)
 		{
-			abiTypes.push_back(ABIType{ABIType::Hex, ABIType::AlignRight, 32, ABIType::Pointer});
-			abiTypes.push_back(ABIType{ABIType::UnsignedDec, ABIType::AlignRight, 32});
-			abiTypes.push_back(ABIType{ABIType::String, ABIType::AlignLeft, 32});
+			dynamicTypes.push_back(ABIType{ABIType::UnsignedDec, ABIType::AlignRight, 32, ABIType::MetaString});
+			dynamicTypes.push_back(ABIType{ABIType::String, ABIType::AlignLeft, 32, ABIType::MetaString});
 		}
 	}
 	else if (regex_match(type, s_tupleArrayType))
 	{
-		for (size_t i = 0; i < arraySize(type); i++)
-		{
-			for (auto const& component: _functionOutput["components"])
-			{
-				auto tupleComponentTypes = fromTypeName(component);
-				if (tupleComponentTypes)
-					for (auto const& abiType: tupleComponentTypes.get())
-						abiTypes.push_back(abiType);
-			}
-		}
+		return boost::none;
 	}
 	else
 		return boost::none;
 
-	return boost::optional<vector<ABIType>>{abiTypes};
+	return boost::optional<tuple<ABITypes, ABITypes, ABITypes>>{make_tuple(addressTypes, valueTypes, dynamicTypes)};
 }

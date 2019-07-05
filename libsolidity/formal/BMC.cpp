@@ -55,6 +55,9 @@ void BMC::analyze(SourceUnit const& _source, shared_ptr<Scanner> const& _scanner
 
 	m_safeAssertions += move(_safeAssertions);
 	m_context.setSolver(m_interface);
+	m_context.reset();
+	m_variableUsage.setFunctionInlining(true);
+
 	_source.accept(*this);
 
 	solAssert(m_interface->solvers() > 0, "");

@@ -37,8 +37,11 @@ void CHC::analyze(SourceUnit const& _source, shared_ptr<Scanner> const& _scanner
 {
 	solAssert(_source.annotation().experimentalFeatures.count(ExperimentalFeature::SMTChecker), "");
 
-	m_context.setSolver(m_interface->z3Interface());
 	m_scanner = _scanner;
+
+	m_context.setSolver(m_interface->z3Interface());
+	m_context.reset();
+	m_variableUsage.setFunctionInlining(false);
 
 	_source.accept(*this);
 }
@@ -88,9 +91,11 @@ void CHC::endVisit(FunctionDefinition const& _function)
 	SMTEncoder::endVisit(_function);
 }
 
-bool CHC::visit(IfStatement const&)
+bool CHC::visit(IfStatement const& _if)
 {
 	solAssert(m_currentFunction, "");
+
+	SMTEncoder::visit(_if);
 
 	return false;
 }

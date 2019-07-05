@@ -53,7 +53,7 @@ void Z3CHCInterface::registerRelation(Expression const& _expr)
 void Z3CHCInterface::addRule(Expression const& _expr, string const& _name)
 {
 	z3::expr rule = m_z3Interface->toZ3Expr(_expr);
-	if (m_variables.empty())
+	if (m_z3Interface->constants().empty())
 		m_solver.add_rule(rule, m_context->str_symbol(_name.c_str()));
 	else
 	{
@@ -61,7 +61,6 @@ void Z3CHCInterface::addRule(Expression const& _expr, string const& _name)
 		for (auto const& var: m_z3Interface->constants())
 			variables.push_back(var.second);
 		z3::expr boundRule = z3::forall(variables, rule);
-		cout << "\n\nBound rule:\n" << boundRule << endl;
 		m_solver.add_rule(boundRule, m_context->str_symbol(_name.c_str()));
 	}
 }
@@ -70,7 +69,6 @@ pair<CheckResult, vector<string>> Z3CHCInterface::query(Expression const& _expr)
 {
 	CheckResult result;
 	vector<string> values;
-	cout << m_solver << endl;
 	try
 	{
 		z3::expr z3Expr = m_z3Interface->toZ3Expr(_expr);
@@ -79,14 +77,12 @@ pair<CheckResult, vector<string>> Z3CHCInterface::query(Expression const& _expr)
 		case z3::check_result::sat:
 		{
 			result = CheckResult::SATISFIABLE;
-			cout << m_solver.get_answer() << endl;
 			// TODO retrieve model.
 			break;
 		}
 		case z3::check_result::unsat:
 		{
 			result = CheckResult::UNSATISFIABLE;
-			cout << m_solver.get_answer() << endl;
 			// TODO retrieve invariants.
 			break;
 		}

@@ -27,7 +27,11 @@ using namespace dev;
 using namespace langutil;
 using namespace dev::solidity;
 
-BMC::BMC(smt::EncodingContext& _context, ErrorReporter& _errorReporter, map<h256, string> const& _smtlib2Responses):
+BMC::BMC(
+	smt::EncodingContext& _context,
+	ErrorReporter& _errorReporter,
+	map<h256, string> const& _smtlib2Responses
+):
 	SMTEncoder(_context),
 	m_outerErrorReporter(_errorReporter),
 	m_interface(make_shared<smt::SMTPortfolio>(_smtlib2Responses))
@@ -43,12 +47,13 @@ BMC::BMC(smt::EncodingContext& _context, ErrorReporter& _errorReporter, map<h256
 #endif
 }
 
-void BMC::analyze(SourceUnit const& _source, shared_ptr<Scanner> const& _scanner)
+void BMC::analyze(SourceUnit const& _source, shared_ptr<Scanner> const& _scanner, set<Expression const*> _safeAssertions)
 {
 	solAssert(_source.annotation().experimentalFeatures.count(ExperimentalFeature::SMTChecker), "");
 
 	m_scanner = _scanner;
 
+	m_safeAssertions += move(_safeAssertions);
 	m_context.setSolver(m_interface);
 	_source.accept(*this);
 
@@ -378,11 +383,12 @@ void BMC::visitAssert(FunctionCall const& _funCall)
 	auto const& args = _funCall.arguments();
 	solAssert(args.size() == 1, "");
 	solAssert(args.front()->annotation().type->category() == Type::Category::Bool, "");
-	addVerificationTarget(
-		VerificationTarget::Type::Assert,
-		expr(*args.front()),
-		&_funCall
-	);
+	if (!m_safeAssertions.count(&_funCall))
+		addVerificationTarget(
+			VerificationTarget::Type::Assert,
+			expr(*args.front()),
+			&_funCall
+		);
 }
 
 void BMC::visitRequire(FunctionCall const& _funCall)

@@ -34,6 +34,8 @@
 
 #include <libsolidity/formal/Z3CHCInterface.h>
 
+#include <set>
+
 namespace dev
 {
 namespace solidity
@@ -46,6 +48,8 @@ public:
 
 	void analyze(SourceUnit const& _sources, std::shared_ptr<langutil::Scanner> const& _scanner);
 
+	std::set<Expression const*> safeAssertions() { return m_safeAssertions; }
+
 private:
 	/// Visitor functions.
 	//@{
@@ -57,7 +61,6 @@ private:
 	void endVisit(FunctionCall const& _node) override;
 
 	void visitAssert(FunctionCall const& _funCall);
-	void visitBranch(Statement const& _statement, smt::Expression const& _predicate);
 	//@}
 
 	/// Helpers.
@@ -65,92 +68,25 @@ private:
 	void reset();
 	bool shouldVisit(ContractDefinition const& _contract);
 	bool shouldVisit(FunctionDefinition const& _function);
-	void pushBlock(smt::Expression const& _block);
-	void popBlock();
-	//@}
-
-	/// Sort helpers.
-	//@{
-	smt::SortPointer functionSort(FunctionDefinition const& _function);
-	smt::SortPointer interfaceSort();
-	//@}
-
-	/// Predicate helpers.
-	//@{
-	std::string predicateName(FunctionDefinition const& _function);
-
-	/// @returns a new block of given _sort and _name.
-	std::shared_ptr<smt::SymbolicFunctionVariable> createBlock(smt::SortPointer _sort, std::string _name);
-	/// Creates a block for the given _function or increases its SSA index
-	/// if the block already exists which in practice creates a new function.
-	void createFunctionBlock(FunctionDefinition const& _function);
-	std::vector<smt::Expression> functionParameters(FunctionDefinition const& _function);
-
-	/// Constructor predicate over current variables.
-	smt::Expression constructor();
-	/// Interface predicate over current variables.
-	smt::Expression interface();
-	/// Error predicate over current variables.
-	smt::Expression error();
-	/// Predicate for block _node over current variables.
-	smt::Expression predicateCurrent(ASTNode const* _node);
-	/// Predicate for block _node over the variables at the latest
-	/// block entry.
-	smt::Expression predicateEntry(ASTNode const* _node);
 	//@}
 
 	/// Solver related.
 	//@{
-	void addRule(smt::Expression const& _rule, ASTNode const* _from, ASTNode const* _to);
-	void query(smt::Expression const& _query, langutil::SourceLocation const& _location, std::string _description);
-	void declareSymbols();
-	//@}
-
-	/// Predicates.
-	//@{
-	/// Constructor predicate.
-	/// Default constructor sets state vars to 0.
-	std::shared_ptr<smt::SymbolicVariable> m_constructorPredicate;
-
-	/// Artificial Interface predicate.
-	/// Single entry block for all functions.
-	std::shared_ptr<smt::SymbolicVariable> m_interfacePredicate;
-
-	/// Artificial Error predicate.
-	/// Single error block for all assertions.
-	std::shared_ptr<smt::SymbolicVariable> m_errorPredicate;
-
-	/// Maps AST nodes to their predicates.
-	std::unordered_map<ASTNode const*, std::shared_ptr<smt::SymbolicVariable>> m_predicates;
-	//@}
-
-	/// Variables.
-	//@{
-	/// State variables sorts.
-	/// Used by all predicates.
-	std::vector<smt::SortPointer> m_stateSorts;
-	/// State variables.
-	/// Used to create all predicates.
-	std::vector<VariableDeclaration const*> m_stateVariables;
-
-	/// Input sorts for function predicates.
-	std::map<FunctionDefinition const*, smt::SortPointer> m_functionSorts;
-	/// Input variables of the latest block related to a function.
-	std::map<FunctionDefinition const*, std::vector<smt::Expression>> m_functionInputs;
+	/// @returns true if query is unsatisfiable (safe).
+	bool query(smt::Expression const& _query, langutil::SourceLocation const& _location);
 	//@}
 
 	/// Verification targets.
 	//@{
 	std::vector<Expression const*> m_verificationTargets;
+
+	/// Assertions proven safe.
+	std::set<Expression const*> m_safeAssertions;
 	//@}
 
 	/// Control-flow.
 	//@{
 	FunctionDefinition const* m_currentFunction = nullptr;
-	/// Number of basic blocks created for the body of the current function.
-	unsigned m_functionBlocks = 0;
-	/// The current control flow path.
-	std::vector<smt::Expression> m_path;
 	//@}
 
 	/// ErrorReporter that comes from CompilerStack.

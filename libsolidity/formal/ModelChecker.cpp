@@ -34,8 +34,8 @@ void ModelChecker::analyze(SourceUnit const& _source, shared_ptr<Scanner> const&
 	if (!_source.annotation().experimentalFeatures.count(ExperimentalFeature::SMTChecker))
 		return;
 
-	//m_bmc.analyze(_source, _scanner);
 	m_chc.analyze(_source, _scanner);
+	m_bmc.analyze(_source, _scanner, m_chc.safeAssertions());
 }
 
 vector<string> ModelChecker::unhandledQueries()
